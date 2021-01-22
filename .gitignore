@@ -102,3 +102,12 @@ dist
 
 # TernJS port file
 .tern-port
+
+.DS_Store
+
+#Ignoring config
+CONFIG
+lambda-dispatcher/function.zip
+zoom-vimeo-uploader/function.zip
+config.json
+lambda-dispatcher/config.json

@@ -1,0 +1,26 @@
+{
+  "name": "zoom-webhook",
+  "version": "1.0.0",
+  "description": "Zoom webhook",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ibgg/zoom-webhook.git"
+  },
+  "keywords": [
+    "zoom",
+    "vimeo",
+    "webhook",
+    "aws"
+  ],
+  "author": "holmes",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/ibgg/zoom-webhook/issues"
+  },
+  "homepage": "https://github.com/ibgg/zoom-webhook",
+  "dependencies": {}
+}
