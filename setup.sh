@@ -10,8 +10,9 @@ REGION="us-east-1"
 ROLE_NAME="zoom-webhook"
 
 ## Lambda setup
-ZOOM_VIMEO_FUNCTION_NAME="zoom-vimeo-uploader"
+AUTHORIZER_FUNCTION_NAME="lambda-authorizer"
 DISPATCHER_FUNCTION_NAME="lambda-dispatcher"
+ZOOM_VIMEO_FUNCTION_NAME="zoom-vimeo-uploader"
 TIMEOUT=600
 MEMORY_SIZE=512
 
@@ -22,12 +23,14 @@ REST_RESOURCE_NAME="zoom-webhook"
 STAGE_NAME="prod"
 STATEMENT_TEST_ID="apigateway-test-$REST_RESOURCE_NAME"
 STATEMENT_PROD_ID="apigateway-prod-$REST_RESOURCE_NAME"
+STATEMENT_AUTH_TEST_ID="authorizer-test-$REST_RESOURCE_NAME"
+STATEMENT_AUTH_PROD_ID="authorizer-prod-$REST_RESOURCE_NAME"
 
 echo "::::::::::::::AWS ZOOM WEBHOOK::::::::::::::"
 
 ## Installing required dependences
 echo "Installing nodejs dependences for lambda function $ZOOM_VIMEO_FUNCTION_NAME..."
-cd ./zoom-vimeo-uploader
+cd $ZOOM_VIMEO_FUNCTION_NAME
 npm install
 
 ## zip function for zoom webhook
@@ -37,7 +40,13 @@ cd ..
 
 ## zip function for dispatcher
 echo "Zipping $DISPATCHER_FUNCTION_NAME lambda function  and dependences..."
-cd ./lambda-dispatcher
+cd $DISPATCHER_FUNCTION_NAME
+zip function.zip index.js
+cd ..
+
+## zip function for Authorization
+echo "Zipping $AUTHORIZER_FUNCTION_NAME lambda function  and dependences..."
+cd $AUTHORIZER_FUNCTION_NAME
 zip function.zip index.js
 cd ..
 
@@ -65,19 +74,30 @@ aws iam attach-role-policy \
 	--role-name $ROLE_NAME \
 	--policy-arn arn:aws:iam::aws:policy/service-role/AWSLambdaRole
 
-## New Lambda function creation for archiving
+## New Lambda function creation for Zoom and vimeo integation
+echo "Creating lambda function $AUTHORIZER_FUNCTION_NAME..."
+aws lambda create-function \
+	--function-name arn:aws:lambda:$REGION:$USERID:function:$AUTHORIZER_FUNCTION_NAME \
+	--environment "Variables={REGION=$REGION,VERIFICATION_TOKEN=$VERIFICATION_TOKEN}" \
+	--zip-file fileb://$AUTHORIZER_FUNCTION_NAME/function.zip \
+	--handler index.handler \
+	--runtime nodejs12.x \
+	--role arn:aws:iam::$USERID:role/$ROLE_NAME
+
+## New Lambda function creation for Zoom and vimeo integation
 echo "Creating lambda function $ZOOM_VIMEO_FUNCTION_NAME..."
 aws lambda create-function \
 	--function-name arn:aws:lambda:$REGION:$USERID:function:$ZOOM_VIMEO_FUNCTION_NAME \
 	--zip-file fileb://$ZOOM_VIMEO_FUNCTION_NAME/function.zip \
-	--handler index.handler --runtime nodejs12.x \
+	--handler index.handler \
+	--runtime nodejs12.x \
 	--role arn:aws:iam::$USERID:role/$ROLE_NAME
 
 ## Update function to set environment variables and timeout
 echo "Updating function to set environment variables: Memory size: $MEMORY_SIZE, Region: $REGION and TIMEOT: $TIMEOUT..."
 aws lambda update-function-configuration \
 	--function-name $ZOOM_VIMEO_FUNCTION_NAME \
-	--environment "Variables={REGION=$REGION}" \
+	--environment "Variables={REGION=$REGION,VIMEO_TOKEN=$VIMEO_TOKEN,VIMERO_USER_ID=$VIMERO_USER_ID, VIMEO_PRESET_ID=$VIMEO_PRESET_ID, ZOOM_TOKEN=$ZOOM_TOKEN}" \
 	--timeout $TIMEOUT \
 	--memory-size $MEMORY_SIZE
 
@@ -85,6 +105,7 @@ aws lambda update-function-configuration \
 echo "Creating dispatcher lambda function $DISPATCHER_FUNCTION_NAME..."
 aws lambda create-function \
 	--function-name arn:aws:lambda:$REGION:$USERID:function:$DISPATCHER_FUNCTION_NAME \
+	--environment "Variables={REGION=$REGION}" \
 	--zip-file fileb://$DISPATCHER_FUNCTION_NAME/function.zip \
 	--handler index.handler \
 	--runtime nodejs12.x \
@@ -120,13 +141,35 @@ aws apigateway create-resource \
 echo "Please paste generated resource id..."
 read RESOURCE_ID
 
+echo "Setting API authorizer Lambda $AUTHORIZER_FUNCTION_NAME in prod $STATEMENT_PROD_ID..."
+aws apigateway create-authorizer \
+	--rest-api-id $API_ID \
+	--name 'Zoom_Custom_Authorizer' \
+	--type TOKEN \
+	--authorizer-uri arn:aws:apigateway:$REGION:lambda:path/2015-03-31/functions/arn:aws:lambda:$REGION:$USERID:function:$AUTHORIZER_FUNCTION_NAME/invocations \
+	--identity-source 'method.request.header.authorization' \
+	--authorizer-result-ttl-in-seconds 300
+
+echo "Please paste generated authorizer id..."
+read AUTHORIZER_ID
+
+## Setting API invocations grants
+echo "Setting API invocations grants to $AUTHORIZER_FUNCTION_NAME using statement: $STATEMENT_TEST_ID..."
+aws lambda add-permission \
+	--function-name $AUTHORIZER_FUNCTION_NAME \
+	--statement-id $STATEMENT_AUTH_PROD_ID \
+	--action lambda:InvokeFunction \
+	--principal apigateway.amazonaws.com \
+	--source-arn "arn:aws:execute-api:$REGION:$USERID:$API_ID/authorizers/*"
+
 ## Creación del método post
 echo "Generating POST method for $RESOURCE_ID..."
 aws apigateway put-method \
 	--rest-api-id $API_ID \
 	--resource-id $RESOURCE_ID \
 	--http-method POST \
-	--authorization-type NONE
+	--authorization-type CUSTOM \
+	--authorizer-id $AUTHORIZER_ID
 
 ## Defining lambda target
 echo "Defining lambda $DISPATCHER_FUNCTION_NAME target for invocations..."
@@ -163,7 +206,7 @@ aws apigateway create-deployment \
 	--stage-name $STAGE_NAME
 
 ## Setting API invocations grants
-echo "Setting API invocations grants using statement: $STATEMENT_TEST_ID..."
+echo "Setting API invocations grants to $DISPATCHER_FUNCTION_NAME using statement: $STATEMENT_TEST_ID..."
 aws lambda add-permission \
 	--function-name $DISPATCHER_FUNCTION_NAME \
 	--statement-id $STATEMENT_TEST_ID \
@@ -173,13 +216,16 @@ aws lambda add-permission \
 
 ## Ahora, ejecute el mismo comando de nuevo, pero esta vez conceda a la API implementada permisos para invocar la función de Lambda. PROD
 ## Setting API invocations grants for prod
-echo "Setting API invocations grants in prod $STATEMENT_PROD_ID..."
+echo "Setting API invocations grants to $DISPATCHER_FUNCTION_NAME in prod $STATEMENT_PROD_ID..."
 aws lambda add-permission \
 	--function-name $DISPATCHER_FUNCTION_NAME \
 	--statement-id $STATEMENT_PROD_ID  \
 	--action lambda:InvokeFunction \
 	--principal apigateway.amazonaws.com \
 	--source-arn "arn:aws:execute-api:$REGION:$USERID:$API_ID/$STAGE_NAME/POST/$REST_RESOURCE_NAME"
+
+#--authorizer-uri 'arn:aws:apigateway:us-west-2:lambda:path/2015-03-31/functions/arn:aws:lambda:us-west-2:123412341234:function:customAuthFunction/invocations' \
+#--identity-source 'method.request.header.Authorization' \
 
 echo "Request URL: https://$API_ID.execute-api.$REGION.amazonaws.com/$STAGE_NAME/$REST_RESOURCE_NAME"
 

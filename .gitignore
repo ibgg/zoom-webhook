@@ -109,5 +109,6 @@ dist
 CONFIG
 lambda-dispatcher/function.zip
 zoom-vimeo-uploader/function.zip
+lambda-authorizer/function.zip
 config.json
 lambda-dispatcher/config.json
