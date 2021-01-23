@@ -3,27 +3,11 @@ const https = require("https");
 const { successResponse } = require("./utils/lambdaResponse");
 
 class ZoomToVimeoUploader {
-	account_id;
-	uuid;
-	id;
-	host_id;
-	topic;
-	recording_count;
 	vimeo_headers;
 	records;
-	VIDEO_DESCRIPTION;
 
 	constructor(payload) {
-		this.VIDEO_DESCRIPTION = "Video de sesión de: {topic}, al {start_date}";
-		this.account_id = payload.account_id;
-		this.uuid = payload.object.uuid;
-		this.id = payload.object.id;
-		this.host_id = payload.object.host_id;
-		this.topic = payload.object.topic;
-		this.recording_count = payload.object.topic;
-		//this.recording_files = payload.object.recording_files;
 		this.records = [];
-
 		let me = this;
 
 		payload.object.recording_files.forEach((item, i) => {
@@ -70,11 +54,6 @@ class ZoomToVimeoUploader {
 				path: path,
 				headers: headers,
 			};
-
-			/*
-			if (parameters != null && parameters != undefined){
-				options.qs = parameters;
-			}*/
 
 			var req = https.request(options, function (res) {
 				var chunks = [];
@@ -144,7 +123,6 @@ class ZoomToVimeoUploader {
 
 		let videos_list = [];
 		me.records.forEach((record)=>{
-			console.log(JSON.stringify(record));
 			if (Object.keys(videos_list).indexOf(record['vimeo_folder']) < 0){
 				videos_list[record['vimeo_folder'].trim()] = [];
 			}
@@ -155,10 +133,7 @@ class ZoomToVimeoUploader {
 
 
 		for (const record of Object.entries(videos_list)){
-		//const mapLoop = videos_list.map(async record => {
-			console.log('here in loop');
-			console.log(record);
-			if (folders.indexOf(record[0]) < 0){
+			if (Object.keys(folders).indexOf(record[0]) < 0){
 				let body = {};
 				body["name"]=record[0];
 				// Lets create folder
@@ -172,15 +147,12 @@ class ZoomToVimeoUploader {
 					let resp2 = await me.httpRequest("PUT", "api.vimeo.com", `https://api.vimeo.com/users/${process.env.VIMEO_USER_ID}/projects/${folders[record[0]]}/videos?uris=${videos_str}`, me.vimeo_headers, null);
 				}
 			} else {
-				console.log('right here....');
 				let videos_str = videos_list[record[0]].join(',');
 				let query = {'uris':videos_str};
 				let resp2 = await me.httpRequest("PUT", "api.vimeo.com", `https://api.vimeo.com/users/${process.env.VIMEO_USER_ID}/projects/${folders[record[0]]}/videos?uris=${videos_str}`, me.vimeo_headers);
 			}
 			return 'timeStamp';
 		}
-		//});
-		//await Promise.all(mapLoop);
 	}
 
 	async checkUploadStatus() {
