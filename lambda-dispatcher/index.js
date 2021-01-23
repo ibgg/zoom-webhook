@@ -12,7 +12,7 @@ exports.handler= async (event, ctx, cb) => {
 	console.log(JSON.stringify( event ));
 
     let params = {
-      FunctionName: "zoom-vimeo-uploader",
+      FunctionName: "lambda-zoom-vimeo-uploader",
       InvocationType: "Event",  // <--- This is KEY as it tells Lambda to start execution but immediately return / not wait.
       Payload: JSON.stringify( event )
     };
@@ -32,7 +32,6 @@ exports.handler= async (event, ctx, cb) => {
 
     // Always return 200 not matter what
     return {
-        statusCode : 200,
-        //keyResponse: `${archiveFolderPath}/${archiveFileName}`
+        statusCode : 200
     };
 };

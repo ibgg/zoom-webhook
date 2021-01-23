@@ -12,7 +12,7 @@ ROLE_NAME="zoom-webhook"
 ## Lambda setup
 AUTHORIZER_FUNCTION_NAME="lambda-authorizer"
 DISPATCHER_FUNCTION_NAME="lambda-dispatcher"
-ZOOM_VIMEO_FUNCTION_NAME="zoom-vimeo-uploader"
+ZOOM_VIMEO_FUNCTION_NAME="lambda-zoom-vimeo-uploader"
 TIMEOUT=600
 MEMORY_SIZE=512
 
