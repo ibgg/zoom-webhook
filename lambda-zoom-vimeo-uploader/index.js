@@ -1,4 +1,4 @@
-const { Console } = require("console");
+const { Console, timeStamp } = require("console");
 const https = require("https");
 const { successResponse } = require("./utils/lambdaResponse");
 
@@ -48,7 +48,7 @@ class ZoomToVimeoUploader {
 			record['vimeo_folder']=payload.object.topic.substring(0,31);
 
 			let dt = new Date(record['recording_start']);
-			record["file_name"] = 'GMT'+ dt.getFullYear()+dt.getMonth().toString().padStart(2,'0')+dt.getDay().toString().padStart(2,'0')+'-'+dt.getHours().toString().padStart(2,'0')+dt.getMinutes().toString().padStart(2,'0')+dt.getSeconds().toString().padStart(2,'0');;
+			record["file_name"] = 'GMT'+ dt.getFullYear()+dt.getMonth().toString().padStart(2,'0')+dt.getDay().toString().padStart(2,'0')+'-'+dt.getHours().toString().padStart(2,'0')+dt.getMinutes().toString().padStart(2,'0')+dt.getSeconds().toString().padStart(2,'0');
 
 			me.records.push(record);
 		});
@@ -62,7 +62,6 @@ class ZoomToVimeoUploader {
 	}
 
 	async httpRequest(method, hostname, path, headers, body){
-		let me = this;
 		const response = await new Promise((resolve, reject) => {
 			var options = {
 				method: method,
@@ -72,11 +71,16 @@ class ZoomToVimeoUploader {
 				headers: headers,
 			};
 
+			/*
+			if (parameters != null && parameters != undefined){
+				options.qs = parameters;
+			}*/
+
 			var req = https.request(options, function (res) {
 				var chunks = [];
 
 				if (res.statusCode < 200 || res.statusCode > 299){
-					console.log('ERROR STATUS CODE '+ es.statusCode);
+					console.log('ERROR STATUS CODE '+ res.statusCode);
 					resolve({
 						statusCode: 500,
 						body: "Something went wrong!",
@@ -124,22 +128,59 @@ class ZoomToVimeoUploader {
 		});
 	}
 
-	async requestGetVideoFolders() {
-		const response = await new Promise((resolve, reject) => {
+	async moveVideosToFolders() {
+		console.log('::::::::::::::::::::::::::::::moving videos to folder::::::::::::::::::::::::::::::');
+		let me = this;
+		let response = await me.httpRequest("GET", "api.vimeo.com", `/users/${process.env.VIMEO_USER_ID}/projects`, me.vimeo_headers);
+		let folders = [];
+		if (response['total'] > 0){
+			console.log('requested folders');
+			console.log(JSON.stringify(response['data']));
+			response['data'].forEach((record) => {
+				folders[record['name']] = record['uri'].substring(record['uri'].lastIndexOf('/')+1,record['uri'].length);
+			});
+			console.log(folders);
+		}
 
+		let videos_list = [];
+		me.records.forEach((record)=>{
+			console.log(JSON.stringify(record));
+			if (Object.keys(videos_list).indexOf(record['vimeo_folder']) < 0){
+				videos_list[record['vimeo_folder'].trim()] = [];
+			}
+			videos_list[record['vimeo_folder'].trim()].push(record['vimeo_uri']);
 		});
-		return response;
-	}
+		console.log('videos list');
+		console.log(videos_list);
 
-	async requestMoveVideosToFolders(record) {
-		const response = await new Promise((resolve, reject) => {
 
-		});
-		return response;
-	}
-
-	async moveVideosToFolders(records) {
-
+		for (const record of Object.entries(videos_list)){
+		//const mapLoop = videos_list.map(async record => {
+			console.log('here in loop');
+			console.log(record);
+			if (folders.indexOf(record[0]) < 0){
+				let body = {};
+				body["name"]=record[0];
+				// Lets create folder
+				const resp1 = await me.httpRequest("POST","api.vimeo.com", `/users/${process.env.VIMEO_USER_ID}/projects`, me.vimeo_headers, body);
+				console.log('resp1');
+				console.log(JSON.stringify(resp1));
+				if (resp1.statusCode == undefined || resp1.statusCode == null){
+					folders[record[0]] = resp1['uri'].substring(resp1['uri'].lastIndexOf('/')+1,resp1['uri'].length);
+					let videos_str = videos_list[record[0]].join(',');
+					let query = {'uris':videos_str};
+					let resp2 = await me.httpRequest("PUT", "api.vimeo.com", `https://api.vimeo.com/users/${process.env.VIMEO_USER_ID}/projects/${folders[record[0]]}/videos?uris=${videos_str}`, me.vimeo_headers, null);
+				}
+			} else {
+				console.log('right here....');
+				let videos_str = videos_list[record[0]].join(',');
+				let query = {'uris':videos_str};
+				let resp2 = await me.httpRequest("PUT", "api.vimeo.com", `https://api.vimeo.com/users/${process.env.VIMEO_USER_ID}/projects/${folders[record[0]]}/videos?uris=${videos_str}`, me.vimeo_headers);
+			}
+			return 'timeStamp';
+		}
+		//});
+		//await Promise.all(mapLoop);
 	}
 
 	async checkUploadStatus() {
@@ -155,7 +196,7 @@ class ZoomToVimeoUploader {
 					let presetStatus = await me.httpRequest("PUT", "api.vimeo.com", path, me.vimeo_headers);
 					console.log(presetStatus);
 					if (presetStatus.statusCode == undefined || presetStatus.statusCode == null){
-						record['vimeo_embedded'] = true
+						record['vimeo_embedded'] = true;
 					}
 				}
 
@@ -166,44 +207,32 @@ class ZoomToVimeoUploader {
 
 			}else if (record['vimeo_status'] != 'error'){
 				if (!record['vimeo_embedded']){
-					let path = `/videos/${record['vimeo_id']}/presets/${process.env.VIMEO_PRESET_ID}`
+					let path = `/videos/${record['vimeo_id']}/presets/${process.env.VIMEO_PRESET_ID}`;
 					let presetStatus = await me.httpRequest("PUT", "api.vimeo.com", path, me.vimeo_headers);
 					console.log(presetStatus);
 					if (presetStatus.statusCode == undefined || presetStatus.statusCode == null){
-						record['vimeo_embedded'] = true
+						record['vimeo_embedded'] = true;
 					}
 				}
-				console.log('Not yet available video ' + record['file_name']+' lets try in ' +13+' seconds')
+				console.log('Not yet available video ' + record['file_name']+' lets try in ' +13+' seconds');
 				unavailablecount += 1;
 			}else{
 				console.log('Error status for video '+record['file_name']);
 			}
 		}
 		if (unavailablecount>0){
-			await me.sleep(7000);
+			await me.sleep(10000);
 			await me.checkUploadStatus();
 		}
 	}
 
-	async requestUploadVideo(record) {
-		console.log('::::::::::::::::::::::::::::::Backup video files from zoom::::::::::::::::::::::::::::::');
-		const response = await new Promise((resolve, reject) => {
-			var options = {
-				method: "POST",
-				hostname: "api.vimeo.com",
-				port: null,
-				path: "/me/videos",
-				headers: {
-					"content-type": "application/json",
-					authorization: "Bearer " + process.env.VIMEO_TOKEN,
-				},
-			};
-			console.log(options);
-
+	async uploadVideos() {
+		let me = this;
+		for (const record of me.records){
 			var body = {};
 			let dt = new Date(record['recording_start']);
 
-			body["name"] = 'GMT'+ dt.getFullYear()+dt.getMonth().toString().padStart(2,'0')+dt.getDay().toString().padStart(2,'0')+'-'+dt.getHours().toString().padStart(2,'0')+dt.getMinutes().toString().padStart(2,'0')+dt.getSeconds().toString().padStart(2,'0');;
+			body["name"] = 'GMT'+ dt.getFullYear()+dt.getMonth().toString().padStart(2,'0')+dt.getDay().toString().padStart(2,'0')+'-'+dt.getHours().toString().padStart(2,'0')+dt.getMinutes().toString().padStart(2,'0')+dt.getSeconds().toString().padStart(2,'0');
 			body["description"] = `Video de sesión de: ${record['topic']}, al ${record['recording_start'] }`;
 
 			var privacy = {};
@@ -220,40 +249,7 @@ class ZoomToVimeoUploader {
 			body["upload"] = upload;
 			body["privacy"] = privacy;
 
-			console.log(JSON.stringify(body));
-
-			var req = https.request(options, function (res) {
-				var chunks = [];
-				res.on("data", function (chunk) {
-					console.log(chunk);
-					chunks.push(chunk);
-				});
-
-				res.on("end", function () {
-					var body = Buffer.concat(chunks);
-					console.log(body.toString());
-					resolve(JSON.parse(body.toString()));
-				});
-
-				req.on("error", (e) => {
-					console.log(e);
-					reject({
-						statusCode: 500,
-						body: "Something went wrong!",
-					});
-				});
-			});
-
-			req.write(JSON.stringify(body));
-			req.end();
-		});
-		return response;
-	}
-
-	async uploadVideos() {
-		let me = this;
-		for (const record of me.records){
-			const response = await me.requestUploadVideo(record);
+			const response = await me.httpRequest("POST", "api.vimeo.com", "/me/videos", me.vimeo_headers, body); //await me.requestUploadVideo(record);
 			console.log(JSON.stringify(response));
 			record['vimeo_uri'] = response['uri'];
 			record['vimeo_status'] = response['upload']['status'];
@@ -272,6 +268,7 @@ exports.handler = async (event, ctx, cb) => {
 	const zoom2VimeoUploader = new ZoomToVimeoUploader(payload);
 	await zoom2VimeoUploader.uploadVideos();
 	await zoom2VimeoUploader.checkUploadStatus();
+	await zoom2VimeoUploader.moveVideosToFolders();
 
 	const response = successResponse({
 		message: "Success",
