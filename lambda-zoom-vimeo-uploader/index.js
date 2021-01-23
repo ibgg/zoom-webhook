@@ -5,10 +5,12 @@ const { successResponse } = require("./utils/lambdaResponse");
 class ZoomToVimeoUploader {
 	vimeo_headers;
 	records;
+	emails_list;
 
 	constructor(payload) {
 		this.records = [];
 		let me = this;
+
 
 		payload.object.recording_files.forEach((item, i) => {
 			let record = {};
@@ -24,6 +26,7 @@ class ZoomToVimeoUploader {
 			record['status'] = 'listed';
 			record['file_size'] = item['file_size'];
 			record['file_extension'] = item['file_extension'];
+			record['file_type'] = item['file_type'];
 			record['vimeo_id']='';
 			record['vimeo_uri']='';
 			record['vimeo_status']='pending';
@@ -105,6 +108,11 @@ class ZoomToVimeoUploader {
 		return new Promise((resolve) => {
 		  setTimeout(resolve, ms);
 		});
+	}
+
+	async notifyByEmail(){
+		console.log('::::::::::::::::::::::::::::::Trying email notification::::::::::::::::::::::::::::::');
+
 	}
 
 	async moveVideosToFolders() {
@@ -199,34 +207,37 @@ class ZoomToVimeoUploader {
 	}
 
 	async uploadVideos() {
+		console.log('::::::::::::::::::::::::::::::Backup video files from zoom::::::::::::::::::::::::::::::')
 		let me = this;
 		for (const record of me.records){
-			var body = {};
-			let dt = new Date(record['recording_start']);
-
-			body["name"] = 'GMT'+ dt.getFullYear()+dt.getMonth().toString().padStart(2,'0')+dt.getDay().toString().padStart(2,'0')+'-'+dt.getHours().toString().padStart(2,'0')+dt.getMinutes().toString().padStart(2,'0')+dt.getSeconds().toString().padStart(2,'0');
-			body["description"] = `Video de sesión de: ${record['topic']}, al ${record['recording_start'] }`;
-
-			var privacy = {};
-			privacy["view"] = "unlisted";
-			privacy["embed"] = "public";
-			privacy["comments"] = "nobody";
-			privacy["download"] = "false";
-
-			var upload = {};
-			upload["approach"] = "pull";
-			upload["size"] = record.file_size;
-			upload["link"] = record.download_url;
-
-			body["upload"] = upload;
-			body["privacy"] = privacy;
-
-			const response = await me.httpRequest("POST", "api.vimeo.com", "/me/videos", me.vimeo_headers, body); //await me.requestUploadVideo(record);
-			console.log(JSON.stringify(response));
-			record['vimeo_uri'] = response['uri'];
-			record['vimeo_status'] = response['upload']['status'];
-			record['vimeo_transcode_status'] = response['transcode']['status'];
-			record['vimeo_id']= record['vimeo_uri'].substring(8,record['vimeo_uri'].length);	
+			if (record['file_type'] != null && record['file_type'] != undefined && record['file_type'].toUpperCase()=='MP4'){
+				var body = {};
+				let dt = new Date(record['recording_start']);
+	
+				body["name"] = 'GMT'+ dt.getFullYear()+dt.getMonth().toString().padStart(2,'0')+dt.getDay().toString().padStart(2,'0')+'-'+dt.getHours().toString().padStart(2,'0')+dt.getMinutes().toString().padStart(2,'0')+dt.getSeconds().toString().padStart(2,'0')+'.'+record['file_type'];
+				body["description"] = `Video de sesión de: ${record['topic']}, al ${record['recording_start'] }`;
+	
+				var privacy = {};
+				privacy["view"] = "unlisted";
+				privacy["embed"] = "public";
+				privacy["comments"] = "nobody";
+				privacy["download"] = "false";
+	
+				var upload = {};
+				upload["approach"] = "pull";
+				upload["size"] = record.file_size;
+				upload["link"] = record.download_url;
+	
+				body["upload"] = upload;
+				body["privacy"] = privacy;
+	
+				const response = await me.httpRequest("POST", "api.vimeo.com", "/me/videos", me.vimeo_headers, body); //await me.requestUploadVideo(record);
+				console.log(JSON.stringify(response));
+				record['vimeo_uri'] = response['uri'];
+				record['vimeo_status'] = response['upload']['status'];
+				record['vimeo_transcode_status'] = response['transcode']['status'];
+				record['vimeo_id']= record['vimeo_uri'].substring(8,record['vimeo_uri'].length);
+			}
 		}
 		console.log(JSON.stringify(me.records));
 	}
