@@ -97,7 +97,7 @@ aws lambda create-function \
 echo "Updating function to set environment variables: Memory size: $MEMORY_SIZE, Region: $REGION and TIMEOT: $TIMEOUT..."
 aws lambda update-function-configuration \
 	--function-name $ZOOM_VIMEO_FUNCTION_NAME \
-	--environment "Variables={REGION=$REGION,VIMEO_TOKEN=$VIMEO_TOKEN,VIMERO_USER_ID=$VIMERO_USER_ID, VIMEO_PRESET_ID=$VIMEO_PRESET_ID, ZOOM_TOKEN=$ZOOM_TOKEN}" \
+	--environment "Variables={REGION=$REGION,VIMEO_TOKEN=$VIMEO_TOKEN,VIMEO_USER_ID=$VIMEO_USER_ID, VIMEO_PRESET_ID=$VIMEO_PRESET_ID, ZOOM_TOKEN=$ZOOM_TOKEN}" \
 	--timeout $TIMEOUT \
 	--memory-size $MEMORY_SIZE
 
@@ -121,6 +121,15 @@ aws apigateway create-rest-api \
 ## Requesting for Generated API ID
 echo "Please paste generated API ID..."
 read API_ID
+
+## Setting API invocations grants
+echo "Setting API invocations grants to $AUTHORIZER_FUNCTION_NAME using statement: $STATEMENT_TEST_ID..."
+aws lambda add-permission \
+	--function-name $AUTHORIZER_FUNCTION_NAME \
+	--statement-id $STATEMENT_AUTH_PROD_ID \
+	--action lambda:InvokeFunction \
+	--principal apigateway.amazonaws.com \
+	--source-arn "arn:aws:execute-api:$REGION:$USERID:$API_ID/authorizers/*"
 
 ## Getting API Resources $API_ID
 echo "Printing generated resource for $API_ID..."
@@ -152,15 +161,6 @@ aws apigateway create-authorizer \
 
 echo "Please paste generated authorizer id..."
 read AUTHORIZER_ID
-
-## Setting API invocations grants
-echo "Setting API invocations grants to $AUTHORIZER_FUNCTION_NAME using statement: $STATEMENT_TEST_ID..."
-aws lambda add-permission \
-	--function-name $AUTHORIZER_FUNCTION_NAME \
-	--statement-id $STATEMENT_AUTH_PROD_ID \
-	--action lambda:InvokeFunction \
-	--principal apigateway.amazonaws.com \
-	--source-arn "arn:aws:execute-api:$REGION:$USERID:$API_ID/authorizers/*"
 
 ## Creación del método post
 echo "Generating POST method for $RESOURCE_ID..."

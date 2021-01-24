@@ -6,38 +6,41 @@ class ZoomToVimeoUploader {
 	vimeo_headers;
 	records;
 	emails_list;
+	checkingAttempts;
 
 	constructor(payload) {
 		this.records = [];
+		this.checkingAttempts = 0;
 		let me = this;
 
-
 		payload.object.recording_files.forEach((item, i) => {
-			let record = {};
-			//record['email'] = item['host_email'];
-			record['recording_start'] = item['recording_start'];
-			record['recording_end'] = item['recording_end'];
-			record['download_url'] = item['download_url'];
-			record['play_url'] = item['play_url'];
-			record['topic'] = payload.object.topic;
-			record['record_id'] = item['id'];
-			record['meeting_id'] = item['meeting_id'];
-			record['meeting_uuid'] = payload.object.uuid;
-			record['status'] = 'listed';
-			record['file_size'] = item['file_size'];
-			record['file_extension'] = item['file_extension'];
-			record['file_type'] = item['file_type'];
-			record['vimeo_id']='';
-			record['vimeo_uri']='';
-			record['vimeo_status']='pending';
-			record['vimeo_transcode_status']='pending';
-			record['vimeo_embedded'] = false;
-			record['vimeo_folder']=payload.object.topic.substring(0,31);
-
-			let dt = new Date(record['recording_start']);
-			record["file_name"] = 'GMT'+ dt.getFullYear()+dt.getMonth().toString().padStart(2,'0')+dt.getDay().toString().padStart(2,'0')+'-'+dt.getHours().toString().padStart(2,'0')+dt.getMinutes().toString().padStart(2,'0')+dt.getSeconds().toString().padStart(2,'0');
-
-			me.records.push(record);
+			if (item['file_type'] != null && item['file_type'] != undefined && item['file_type'].toUpperCase()=='MP4'){
+				let record = {};
+				//record['email'] = item['host_email'];
+				record['recording_start'] = item['recording_start'];
+				record['recording_end'] = item['recording_end'];
+				record['download_url'] = item['download_url'];
+				record['play_url'] = item['play_url'];
+				record['topic'] = payload.object.topic;
+				record['record_id'] = item['id'];
+				record['meeting_id'] = item['meeting_id'];
+				record['meeting_uuid'] = payload.object.uuid;
+				record['status'] = 'listed';
+				record['file_size'] = item['file_size'];
+				record['file_extension'] = item['file_extension'];
+				record['file_type'] = item['file_type'];
+				record['vimeo_id']='';
+				record['vimeo_uri']='';
+				record['vimeo_status']='pending';
+				record['vimeo_transcode_status']='pending';
+				record['vimeo_embedded'] = false;
+				record['vimeo_folder']=payload.object.topic.substring(0,31);
+	
+				let dt = new Date(record['recording_start']);
+				record["file_name"] = 'GMT'+ dt.getFullYear()+dt.getMonth().toString().padStart(2,'0')+dt.getDay().toString().padStart(2,'0')+'-'+dt.getHours().toString().padStart(2,'0')+dt.getMinutes().toString().padStart(2,'0')+dt.getSeconds().toString().padStart(2,'0');
+	
+				me.records.push(record);
+			}
 		});
 
 		this.vimeo_headers = {
@@ -146,8 +149,6 @@ class ZoomToVimeoUploader {
 				body["name"]=record[0];
 				// Lets create folder
 				const resp1 = await me.httpRequest("POST","api.vimeo.com", `/users/${process.env.VIMEO_USER_ID}/projects`, me.vimeo_headers, body);
-				console.log('resp1');
-				console.log(JSON.stringify(resp1));
 				if (resp1.statusCode == undefined || resp1.statusCode == null){
 					folders[record[0]] = resp1['uri'].substring(resp1['uri'].lastIndexOf('/')+1,resp1['uri'].length);
 					let videos_str = videos_list[record[0]].join(',');
@@ -169,38 +170,42 @@ class ZoomToVimeoUploader {
 		let unavailablecount = 0;
 		for (const record of me.records){
 			let response = await me.httpRequest("GET", "api.vimeo.com", "/me/"+record['vimeo_uri'], me.vimeo_headers); //me.requestCheckUploadStatus(record);
-			record['vimeo_status']=response['status'];
-			if (record['vimeo_status'] == 'available' || record['vimeo_status'] == 'transcoding'){
-				if (!record['vimeo_embedded']){
-					let path = `/videos/${record['vimeo_id']}/presets/${process.env.VIMEO_PRESET_ID}`;
-					let presetStatus = await me.httpRequest("PUT", "api.vimeo.com", path, me.vimeo_headers);
-					console.log(presetStatus);
-					if (presetStatus.statusCode == undefined || presetStatus.statusCode == null){
-						record['vimeo_embedded'] = true;
+			if (response.statusCode == undefined || response.statusCode == null){
+				record['vimeo_status']=response['status'];
+				if (record['vimeo_status'] == 'available' || record['vimeo_status'] == 'transcoding'){
+					if (!record['vimeo_embedded']){
+						let path = `/videos/${record['vimeo_id']}/presets/${process.env.VIMEO_PRESET_ID}`;
+						let presetStatus = await me.httpRequest("PUT", "api.vimeo.com", path, me.vimeo_headers);
+						console.log(presetStatus);
+						if (presetStatus.statusCode == undefined || presetStatus.statusCode == null){
+							record['vimeo_embedded'] = true;
+						}
 					}
-				}
-
-				if (record['vimeo_status'] == 'available')
-					console.log (`Available ${record['file_name']} video!`);
-				else
-					console.log (`Transcoding video ${record['file_name']} almost ready`);
-
-			}else if (record['vimeo_status'] != 'error'){
-				if (!record['vimeo_embedded']){
-					let path = `/videos/${record['vimeo_id']}/presets/${process.env.VIMEO_PRESET_ID}`;
-					let presetStatus = await me.httpRequest("PUT", "api.vimeo.com", path, me.vimeo_headers);
-					console.log(presetStatus);
-					if (presetStatus.statusCode == undefined || presetStatus.statusCode == null){
-						record['vimeo_embedded'] = true;
+	
+					if (record['vimeo_status'] == 'available')
+						console.log (`Available ${record['file_name']} video!`);
+					else
+						console.log (`Transcoding video ${record['file_name']} almost ready`);
+	
+				}else if (record['vimeo_status'] != 'error'){
+					if (!record['vimeo_embedded']){
+						let path = `/videos/${record['vimeo_id']}/presets/${process.env.VIMEO_PRESET_ID}`;
+						let presetStatus = await me.httpRequest("PUT", "api.vimeo.com", path, me.vimeo_headers);
+						console.log(presetStatus);
+						if (presetStatus.statusCode == undefined || presetStatus.statusCode == null){
+							record['vimeo_embedded'] = true;
+						}
 					}
+					console.log('Not yet available video ' + record['file_name']+' lets try in ' +13+' seconds');
+					unavailablecount += 1;
+				}else{
+					record['vimeo_status'] = 'error';
+					console.log('Error status for video '+record['file_name']);
 				}
-				console.log('Not yet available video ' + record['file_name']+' lets try in ' +13+' seconds');
-				unavailablecount += 1;
-			}else{
-				console.log('Error status for video '+record['file_name']);
 			}
 		}
-		if (unavailablecount>0){
+		if (unavailablecount>0 && me.checkingAttempts < 8){
+			me.checkingAttempts +=1;
 			await me.sleep(10000);
 			await me.checkUploadStatus();
 		}
