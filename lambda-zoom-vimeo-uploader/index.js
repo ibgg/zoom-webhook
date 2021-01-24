@@ -98,7 +98,6 @@ class ZoomToVimeoUploader {
 
 
 			if (body!=null && body!=undefined){
-				console.log('NOT UNDEFINED BODY');
 				req.write(JSON.stringify(body));
 			}
 
@@ -187,7 +186,7 @@ class ZoomToVimeoUploader {
 					else
 						console.log (`Transcoding video ${record['file_name']} almost ready`);
 	
-				}else if (record['vimeo_status'] != 'error'){
+				}else if (record['vimeo_status'] != 'error' && record['vimeo_status'] != 'uploading_error'){
 					if (!record['vimeo_embedded']){
 						let path = `/videos/${record['vimeo_id']}/presets/${process.env.VIMEO_PRESET_ID}`;
 						let presetStatus = await me.httpRequest("PUT", "api.vimeo.com", path, me.vimeo_headers);
@@ -199,9 +198,12 @@ class ZoomToVimeoUploader {
 					console.log('Not yet available video ' + record['file_name']+' lets try in ' +13+' seconds');
 					unavailablecount += 1;
 				}else{
+					// We have implement something like SNS, or email approach to notify this error
 					record['vimeo_status'] = 'error';
 					console.log('Error status for video '+record['file_name']);
 				}
+			}else{
+				console.log('There is an error in this file...');
 			}
 		}
 		if (unavailablecount>0 && me.checkingAttempts < 8){
@@ -215,34 +217,32 @@ class ZoomToVimeoUploader {
 		console.log('::::::::::::::::::::::::::::::Backup video files from zoom::::::::::::::::::::::::::::::')
 		let me = this;
 		for (const record of me.records){
-			if (record['file_type'] != null && record['file_type'] != undefined && record['file_type'].toUpperCase()=='MP4'){
-				var body = {};
-				let dt = new Date(record['recording_start']);
-	
-				body["name"] = 'GMT'+ dt.getFullYear()+dt.getMonth().toString().padStart(2,'0')+dt.getDay().toString().padStart(2,'0')+'-'+dt.getHours().toString().padStart(2,'0')+dt.getMinutes().toString().padStart(2,'0')+dt.getSeconds().toString().padStart(2,'0')+'.'+record['file_type'];
-				body["description"] = `Video de sesión de: ${record['topic']}, al ${record['recording_start'] }`;
-	
-				var privacy = {};
-				privacy["view"] = "unlisted";
-				privacy["embed"] = "public";
-				privacy["comments"] = "nobody";
-				privacy["download"] = "false";
-	
-				var upload = {};
-				upload["approach"] = "pull";
-				upload["size"] = record.file_size;
-				upload["link"] = record.download_url;
-	
-				body["upload"] = upload;
-				body["privacy"] = privacy;
-	
-				const response = await me.httpRequest("POST", "api.vimeo.com", "/me/videos", me.vimeo_headers, body); //await me.requestUploadVideo(record);
-				console.log(JSON.stringify(response));
-				record['vimeo_uri'] = response['uri'];
-				record['vimeo_status'] = response['upload']['status'];
-				record['vimeo_transcode_status'] = response['transcode']['status'];
-				record['vimeo_id']= record['vimeo_uri'].substring(8,record['vimeo_uri'].length);
-			}
+			var body = {};
+			let dt = new Date(record['recording_start']);
+
+			body["name"] = 'GMT'+ dt.getFullYear()+dt.getMonth().toString().padStart(2,'0')+dt.getDay().toString().padStart(2,'0')+'-'+dt.getHours().toString().padStart(2,'0')+dt.getMinutes().toString().padStart(2,'0')+dt.getSeconds().toString().padStart(2,'0')+'.'+record['file_type'];
+			body["description"] = `Video de sesión de: ${record['topic']}, al ${record['recording_start'] }`;
+
+			var privacy = {};
+			privacy["view"] = "unlisted";
+			privacy["embed"] = "public";
+			privacy["comments"] = "nobody";
+			privacy["download"] = "false";
+
+			var upload = {};
+			upload["approach"] = "pull";
+			upload["size"] = record.file_size;
+			upload["link"] = record.download_url;
+
+			body["upload"] = upload;
+			body["privacy"] = privacy;
+
+			const response = await me.httpRequest("POST", "api.vimeo.com", "/me/videos", me.vimeo_headers, body); //await me.requestUploadVideo(record);
+			console.log(JSON.stringify(response));
+			record['vimeo_uri'] = response['uri'];
+			record['vimeo_status'] = response['upload']['status'];
+			record['vimeo_transcode_status'] = response['transcode']['status'];
+			record['vimeo_id']= record['vimeo_uri'].substring(8,record['vimeo_uri'].length);
 		}
 		console.log(JSON.stringify(me.records));
 	}
