@@ -114,23 +114,33 @@ class ZoomToVimeoUploader {
 
 	async notifyByEmail(){
 		console.log('::::::::::::::::::::::::::::::Trying email notification::::::::::::::::::::::::::::::');
-
 	}
 
 	async moveVideosToFolders() {
 		console.log('::::::::::::::::::::::::::::::moving videos to folder::::::::::::::::::::::::::::::');
 		let me = this;
-		let response = await me.httpRequest("GET", "api.vimeo.com", `/users/${process.env.VIMEO_USER_ID}/projects`, me.vimeo_headers);
+		// Lets request folders list
+		let page = 1;
+		let counter = 0;
+		let per_page = 100;
 		let folders = [];
-		if (response['total'] > 0){
-			console.log('requested folders');
-			console.log(JSON.stringify(response['data']));
-			response['data'].forEach((record) => {
-				folders[record['name']] = record['uri'].substring(record['uri'].lastIndexOf('/')+1,record['uri'].length);
-			});
-			console.log(folders);
-		}
-
+		do{
+			console.log('Lets request next page... ' + page);
+			let url = `/users/${process.env.VIMEO_USER_ID}/projects?per_page=${per_page}&page=${page}`;
+			console.log(url);
+			let response = await me.httpRequest("GET", "api.vimeo.com", `/users/${process.env.VIMEO_USER_ID}/projects?per_page=${per_page}&page=${page}`, me.vimeo_headers);
+			if (response['total'] > 0) {
+				response['data'].forEach((record) => {
+					folders[record['name']] = record['uri'].substring(record['uri'].lastIndexOf('/')+1,record['uri'].length);
+				});
+			}
+			counter += response['data'].length;
+			page += 1;
+			if (counter >= response['total']) break;
+		}while(1);
+		console.log('Folders in Vimeo: '+JSON.stringify(folders));
+		console.log(JSON.stringify(folders));
+		
 		let videos_list = [];
 		me.records.forEach((record)=>{
 			if (Object.keys(videos_list).indexOf(record['vimeo_folder']) < 0){
@@ -141,7 +151,6 @@ class ZoomToVimeoUploader {
 		console.log('videos list');
 		console.log(videos_list);
 
-
 		for (const record of Object.entries(videos_list)){
 			if (Object.keys(folders).indexOf(record[0]) < 0){
 				let body = {};
@@ -151,12 +160,12 @@ class ZoomToVimeoUploader {
 				if (resp1.statusCode == undefined || resp1.statusCode == null){
 					folders[record[0]] = resp1['uri'].substring(resp1['uri'].lastIndexOf('/')+1,resp1['uri'].length);
 					let videos_str = videos_list[record[0]].join(',');
-					let query = {'uris':videos_str};
+					//let query = {'uris':videos_str};
 					let resp2 = await me.httpRequest("PUT", "api.vimeo.com", `https://api.vimeo.com/users/${process.env.VIMEO_USER_ID}/projects/${folders[record[0]]}/videos?uris=${videos_str}`, me.vimeo_headers, null);
 				}
 			} else {
 				let videos_str = videos_list[record[0]].join(',');
-				let query = {'uris':videos_str};
+				//let query = {'uris':videos_str};
 				let resp2 = await me.httpRequest("PUT", "api.vimeo.com", `https://api.vimeo.com/users/${process.env.VIMEO_USER_ID}/projects/${folders[record[0]]}/videos?uris=${videos_str}`, me.vimeo_headers);
 			}
 			return 'timeStamp';
