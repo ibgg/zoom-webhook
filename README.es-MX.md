@@ -41,7 +41,7 @@ Otorgar permisos de ejecución al script:
 ## Prueba
 Una vez terminada la ejecución del script, es posible invocar el método POST con la url generada por el script al final. La petición se puede hacer desde Postman o CURL (o cualquier cliente REST), de la siguiente forma:
 
-`
+```
 curl -X POST \
   https://3u98xsn0zb.execute-api.us-east-1.amazonaws.com/prod/zoom-webhook \
   -H 'Authorization: PUT HERE YOUR VERIFICATION_TOKEN' \
@@ -95,7 +95,7 @@ curl -X POST \
         }
     }
 }'
-`
+```
 
 ## Links de documentación oficial
 * https://marketplace.zoom.us/docs/api-reference/webhook-reference
